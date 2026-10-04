@@ -17,7 +17,8 @@ Run:
 
 Flags:  
 ```txt
--port 47653  -no-window
+-port 47653
+-no-window
 ```
 
 Config: 
