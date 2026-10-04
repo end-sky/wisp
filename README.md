@@ -28,3 +28,6 @@ Config:
 ```
 
 (also editable via the ⚙ settings dialog)
+
+# Note:
+You may also need gcc to build this application.
