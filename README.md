@@ -1,27 +1,33 @@
 # Wisp
-Lightweight unofficial SoundCloud client for Linux. Go stdlib only, one binary.
+Beautiful and modern unofficial SoundCloud client for Linux. Go stdlib only, one binary.
 
-Build:  
+# Change logs
+Improved support. Longterm front-end support. 
+added new alternative instance SCScrape so you can load the homepage/music using the new instance instead of loading it locally through the SC website.
+UI Improvement, the UI has been revamped.
+Old binary and version still works fine.
+
+# Build:  
 ```bash
 go build -ldflags="-s -w" -o wisp .
 ```
 
 (needs Go 1.21+)
 
-Run:
+# Run:
 ```bash
 ./wisp
 ```
 
 (opens in Chromium/Chrome/Brave app mode, else your default browser)
 
-Flags:  
+# Flags:  
 ```txt
 -port 47653
 -no-window
 ```
 
-Config: 
+# Config: 
 
 ```txt
 ~/.config/wisp/config.json
