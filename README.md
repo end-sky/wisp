@@ -3,8 +3,11 @@ Beautiful and modern unofficial SoundCloud client for Linux. Go stdlib only, one
 
 # Change logs
 Improved support. Longterm front-end support. 
+
 added new alternative instance SCScrape so you can load the homepage/music using the new instance instead of loading it locally through the SC website.
+
 UI Improvement, the UI has been revamped.
+
 Old binary and version still works fine.
 
 # Build:  
