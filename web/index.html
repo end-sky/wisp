@@ -1,0 +1,71 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Wisp</title>
+<style>
+:root{--bg:#0d0d12;--bg2:#15151d;--bg3:#1e1e2a;--fg:#e8e8f0;--mut:#8a8aa0;--p:#a855f7;--p2:#7c3aed}
+*{box-sizing:border-box;margin:0}body{background:var(--bg);color:var(--fg);font:14px system-ui,sans-serif;height:100vh;display:flex;flex-direction:column}
+header{display:flex;gap:10px;align-items:center;padding:12px 16px;background:var(--bg2);border-bottom:1px solid var(--bg3)}
+.logo{font-weight:700;font-size:18px;color:var(--p);letter-spacing:1px}
+input,button,select{font:inherit;color:inherit}
+#q{flex:1;background:var(--bg3);border:1px solid transparent;border-radius:20px;padding:8px 14px;outline:0}#q:focus{border-color:var(--p)}
+button{background:var(--bg3);border:0;border-radius:8px;padding:7px 12px;cursor:pointer}button:hover{background:var(--p2)}
+.tabs{display:flex;gap:6px;padding:10px 16px}.tabs button.on{background:var(--p);color:#fff}
+h2{font-size:15px;padding:0 16px 8px;color:var(--mut);font-weight:500}
+#list{flex:1;overflow:auto;padding:0 8px}
+.row{display:flex;gap:12px;align-items:center;padding:7px 10px;border-radius:8px;cursor:pointer}.row:hover{background:var(--bg2)}.row.now{background:var(--bg3);box-shadow:inset 3px 0 var(--p)}
+.row img,#art{width:44px;height:44px;border-radius:6px;object-fit:cover;background:var(--bg3)}.row>div{flex:1;min-width:0}
+.row b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:500}.row span,.row em{color:var(--mut);font-size:12px;font-style:normal}
+.m{padding:16px;color:var(--mut)}
+footer{display:flex;gap:14px;align-items:center;padding:10px 16px;background:var(--bg2);border-top:1px solid var(--bg3)}
+#np{width:240px;min-width:0}#np b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}#np span{color:var(--mut);font-size:12px}
+#pp{background:var(--p);width:38px;height:38px;border-radius:50%;padding:0}
+#seek{flex:1;accent-color:var(--p)}#vol{width:80px;accent-color:var(--p)}.t{color:var(--mut);font-size:12px;width:36px}
+dialog{margin:auto;background:var(--bg2);color:var(--fg);border:1px solid var(--bg3);border-radius:12px;padding:20px;width:360px}dialog::backdrop{background:#000a}
+dialog label{display:block;margin:10px 0}dialog input[type=text]{width:100%;background:var(--bg3);border:1px solid var(--bg3);border-radius:8px;padding:8px;margin-top:6px}
+</style></head><body>
+<header><span class="logo">WISP</span><input id="q" placeholder="Search artists, tracks, playlists…" autofocus><button id="gear" title="Settings">⚙</button></header>
+<div class="tabs" id="genres"><button data-g="all-music" class="on">Trending</button><button data-g="hiphoprap">Hip-hop</button><button data-g="electronic">Electronic</button><button data-g="danceedm">Dance</button><button data-g="pop">Pop</button><button data-g="rbsoul">R&amp;B</button></div>
+<div class="tabs" id="types"><button data-t="tracks" class="on">Tracks</button><button data-t="users">Artists</button><button data-t="playlists">Playlists</button></div>
+<h2 id="title">Search for something to listen to</h2><div id="list"></div>
+<footer><img id="art" alt=""><div id="np"><b>Nothing playing</b><span></span></div>
+<button id="prev">⏮</button><button id="pp">▶</button><button id="next">⏭</button>
+<span class="t" id="cur">0:00</span><input type="range" id="seek" min="0" max="1000" value="0"><span class="t" id="dur">0:00</span>
+<input type="range" id="vol" min="0" max="1" step="0.01" value="0.8"></footer>
+<dialog id="dlg"><h3>Settings</h3>
+<label><input type="radio" name="mode" value="direct"> Load directly from SoundCloud</label>
+<label><input type="radio" name="mode" value="instance"> Use a Soundcloak instance</label>
+<label>Instance URL<input type="text" id="inst" placeholder="https://sc.kuuro.net"></label>
+<p style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px"><button id="cancel">Cancel</button><button id="save" style="background:var(--p)">Save</button></p></dialog>
+<script>
+const $=s=>document.querySelector(s),a=new Audio();let list=[],queue=[],cur=-1,type='tracks',nowId=null;
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const fmt=ms=>{if(!isFinite(ms)||!ms)return'';const s=Math.round(ms/1000);return Math.floor(s/60)+':'+String(s%60).padStart(2,'0')};
+async function show(u,t){$('#title').textContent=t;$('#list').innerHTML='<p class=m>Loading…</p>';
+ try{const r=await fetch(u);if(!r.ok)throw new Error(await r.text());list=await r.json();render()}catch(e){$('#list').innerHTML='<p class=m>'+esc(e.message)+'</p>'}}
+function render(){$('#list').innerHTML=list.map((it,i)=>`<div class="row${it.id==nowId?' now':''}" data-i="${i}"><img src="${esc(it.art)}" loading="lazy" onerror="this.style.visibility='hidden'"><div><b>${esc(it.title)}</b><span>${esc(it.sub)}</span></div><em>${fmt(it.dur)}</em></div>`).join('')||'<p class=m>Nothing found</p>'}
+$('#list').onclick=e=>{const r=e.target.closest('.row');if(!r)return;const it=list[r.dataset.i];
+ if(it.kind=='user')show('/api/user?id='+encodeURIComponent(it.id),it.title);
+ else if(it.kind=='playlist')show('/api/playlist?id='+encodeURIComponent(it.id),it.title);
+ else{queue=list.filter(x=>x.kind=='track');play(queue.indexOf(it))}};
+function play(i){if(i<0||i>=queue.length)return;cur=i;const t=queue[i];nowId=t.id;a.src=t.stream;a.play().catch(()=>{});
+ $('#np b').textContent=t.title;$('#np span').textContent=t.sub;$('#art').src=t.art||'';$('#dur').textContent=fmt(t.dur)||'0:00';render();
+ if('mediaSession'in navigator)navigator.mediaSession.metadata=new MediaMetadata({title:t.title,artist:t.sub,artwork:t.art?[{src:t.art}]:[]})}
+const toggle=()=>a.paused?a.play():a.pause();
+$('#pp').onclick=toggle;$('#next').onclick=()=>play(cur+1);$('#prev').onclick=()=>a.currentTime>3?a.currentTime=0:play(cur-1);
+a.onplay=()=>$('#pp').textContent='⏸';a.onpause=()=>$('#pp').textContent='▶';a.onended=()=>play(cur+1);
+a.onerror=()=>{if(cur>=0)$('#np span').textContent='⚠ Could not play this track'};
+const D=()=>isFinite(a.duration)?a.duration:(queue[cur]?.dur||0)/1000;
+a.ontimeupdate=()=>{$('#cur').textContent=fmt(a.currentTime*1000)||'0:00';if(D()){$('#seek').value=a.currentTime/D()*1000;$('#dur').textContent=fmt(D()*1000)}};
+$('#seek').oninput=e=>{if(D())a.currentTime=e.target.value/1000*D()};
+$('#vol').oninput=e=>a.volume=e.target.value;a.volume=.8;
+document.onkeydown=e=>{if(e.target.tagName!='INPUT'&&e.code=='Space'){e.preventDefault();toggle()}};
+function search(){const q=$('#q').value.trim();if(q)show(`/api/search?type=${type}&q=${encodeURIComponent(q)}`,`“${q}” — ${type}`)}
+$('#q').addEventListener('keydown',e=>{if(e.key==='Enter')search()});
+let genre='all-music';
+function home(){show('/api/trending?genre='+genre,'Trending')}
+document.querySelectorAll('#types button').forEach(b=>b.onclick=()=>{document.querySelector('#types .on').classList.remove('on');b.classList.add('on');type=b.dataset.t;search()});
+document.querySelectorAll('#genres button').forEach(b=>b.onclick=()=>{document.querySelector('#genres .on').classList.remove('on');b.classList.add('on');genre=b.dataset.g;$('#q').value='';home()});
+document.querySelector('.logo').onclick=home;document.querySelector('.logo').style.cursor='pointer';home();
+$('#gear').onclick=async()=>{const c=await (await fetch('/api/settings')).json();
+ document.querySelector(`input[value=${c.mode}]`).checked=true;$('#inst').value=c.instance;$('#dlg').showModal()};
+$('#cancel').onclick=()=>$('#dlg').close();
+$('#save').onclick=async()=>{await fetch('/api/settings',{method:'POST',body:JSON.stringify({mode:document.querySelector('input[name=mode]:checked').value,instance:$('#inst').value.trim()})});$('#dlg').close();$('#q').value.trim()?search():home()};
+</script></body></html>
