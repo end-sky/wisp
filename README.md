@@ -8,7 +8,7 @@ added new alternative instance SCScrape so you can load the homepage/music using
 
 UI Improvement, the UI has been revamped.
 
-Old binary and version still works fine.
+Old binary and version still works fine. Build still the same. no dependencies.
 
 # Build:  
 ```bash
