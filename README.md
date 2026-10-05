@@ -10,6 +10,15 @@ UI Improvement, the UI has been revamped.
 
 Old binary and version still works fine. Build still the same. no dependencies.
 
+Fixed instances. It now uses Soundcloak's API.
+
+# Instances
+Instance mode: pick ss.2kool4u.net / sc.kuuro.net or a custom Soundcloak-style URL in Settings.
+If SoundCloud rotates its client_id and auto-detection ever fails, set "client_id" in config.json.
+
+Soundcloak instances with EnableAPI (see maid.zone/soundcloak/instances.json) are auto-detected via /_/info and used
+through their /_/api/v2 proxy + /_/api/{progressive,restream,hls} streams; others fall back to HTML scraping.
+
 # Build:  
 ```bash
 go build -ldflags="-s -w" -o wisp .
