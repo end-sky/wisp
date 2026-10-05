@@ -42,7 +42,7 @@ func newClient() *http.Client {
 }
 
 var (
-	cfg   = Config{Mode: "direct", Instance: "https://sc.kuuro.net"}
+	cfg   = Config{Mode: "direct", Instance: "https://sc1.maid.zone"}
 	cfgMu sync.Mutex
 	cid   string
 	cidMu sync.Mutex
@@ -210,6 +210,7 @@ type scObj struct {
 		AvatarURL string `json:"avatar_url"`
 	} `json:"user"`
 	Tracks []scObj `json:"tracks"`
+	Permalink string `json:"permalink_url"`
 }
 
 type Item struct {
@@ -232,6 +233,11 @@ func toItem(o scObj) Item {
 		it.Sub = fmt.Sprintf("%s · %d tracks", o.User.Username, o.TrackCount)
 	default:
 		it.Kind, it.Sub, it.Stream = "track", o.User.Username, "/stream?id="+it.ID
+		if ok, _ := apiMode(); ok && o.Permalink != "" { // soundcloak /_/api streams are addressed by permalink
+			if pu, err := url.Parse(o.Permalink); err == nil {
+				it.Stream = "/stream?p=" + url.QueryEscape(pu.Path)
+			}
+		}
 		if it.Art == "" {
 			it.Art = o.User.AvatarURL
 		}
@@ -260,7 +266,7 @@ func hydrate(ts []scObj) []scObj { // playlists return stub tracks (id only)
 	if len(ids) == 0 {
 		return ts
 	}
-	b, err := scGet("/tracks", url.Values{"ids": {strings.Join(ids, ",")}})
+	b, err := apiGet("/tracks", url.Values{"ids": {strings.Join(ids, ",")}})
 	if err != nil {
 		return ts
 	}
@@ -379,18 +385,167 @@ func scrape(inst, path, kind string) ([]Item, error) {
 	return out, nil
 }
 
+type apiEnt struct {
+	v  bool
+	at time.Time
+}
+
+var (
+	apiCache = map[string]apiEnt{}
+	apiMu    sync.Mutex
+)
+
+// hasAPI asks the instance's /_/info whether its /_/api/v2 SoundCloud proxy is enabled.
+func hasAPI(inst string) bool {
+	apiMu.Lock()
+	c, ok := apiCache[inst]
+	apiMu.Unlock()
+	if ok && time.Since(c.at) < 10*time.Minute {
+		return c.v
+	}
+	v := false
+	if b, err := getBody(inst + "/_/info"); err == nil {
+		var i struct{ EnableAPI bool }
+		v = json.Unmarshal(b, &i) == nil && i.EnableAPI
+	}
+	apiMu.Lock()
+	apiCache[inst] = apiEnt{v, time.Now()}
+	apiMu.Unlock()
+	return v
+}
+
+func apiMode() (bool, string) {
+	m, inst := mode()
+	return m == "instance" && hasAPI(inst), inst
+}
+
+// scrapeMode reports "instance" only when HTML scraping is needed (instance without API).
+func scrapeMode() (string, string) {
+	m, inst := mode()
+	if m == "instance" && hasAPI(inst) {
+		m = "direct"
+	}
+	return m, inst
+}
+
+// apiGet fetches SoundCloud API data: via the instance's /_/api/v2 proxy if available, else directly.
+func apiGet(path string, q url.Values) ([]byte, error) {
+	ok, inst := apiMode()
+	if !ok {
+		return scGet(path, q)
+	}
+	var b []byte
+	var err error
+	for try := 0; try < 2; try++ {
+		if b, err = getBody(inst + "/_/api/v2" + path + "?" + q.Encode()); err == nil {
+			return b, nil
+		}
+		if !strings.Contains(err.Error(), "HTTP 429") && !strings.Contains(err.Error(), "HTTP 5") {
+			break
+		}
+		time.Sleep(700 * time.Millisecond)
+	}
+	return nil, err
+}
+
+func trending(g string) ([]scObj, error) {
+	q := strings.ReplaceAll(g, "-", " ")
+	if g == "all-music" {
+		q = "trending"
+	}
+	tries := []struct {
+		p string
+		q url.Values
+	}{ // /charts is not on soundcloak's proxy allow-list, so fall back to other endpoints
+		{"/charts", url.Values{"kind": {"trending"}, "genre": {"soundcloud:genres:" + g}, "limit": {"40"}}},
+		{"/featured_tracks/top/" + g, url.Values{"limit": {"40"}}},
+		{"/search/tracks", url.Values{"q": {q}, "limit": {"40"}}},
+	}
+	var err error
+	for _, t := range tries {
+		var b []byte
+		if b, err = apiGet(t.p, t.q); err != nil {
+			continue
+		}
+		var c struct {
+			Collection []struct {
+				scObj
+				Track *scObj `json:"track"`
+			} `json:"collection"`
+		}
+		json.Unmarshal(b, &c)
+		var out []scObj
+		for _, x := range c.Collection {
+			if x.Track != nil {
+				out = append(out, *x.Track)
+			} else {
+				out = append(out, x.scObj)
+			}
+		}
+		if len(out) > 0 {
+			return out, nil
+		}
+	}
+	if err == nil {
+		err = fmt.Errorf("no trending results")
+	}
+	return nil, err
+}
+
+// ---- public instance list (maid.zone) ----
+
+type instInfo struct {
+	URL string `json:"url"`
+	API bool   `json:"api"`
+}
+
+var (
+	instCache []instInfo
+	instAt    time.Time
+	instMu    sync.Mutex
+	instBuilt = []instInfo{{"https://sc1.maid.zone", true}, {"https://sc2.maid.zone", true}, {"https://sc3.maid.zone", true}, {"https://soundcloak.tijn.dev", true}, {"https://sc.kuuro.net", false}}
+)
+
+func instances() []instInfo {
+	instMu.Lock()
+	defer instMu.Unlock()
+	if instCache != nil && time.Since(instAt) < time.Hour {
+		return instCache
+	}
+	var raw []struct {
+		URL    string
+		Status struct{ Error string }
+		Settings struct{ EnableAPI bool }
+	}
+	if b, err := getBody("https://maid.zone/soundcloak/instances.json"); err == nil && json.Unmarshal(b, &raw) == nil {
+		out := []instInfo{}
+		for _, r := range raw {
+			if r.Status.Error == "" && r.URL != "" {
+				out = append(out, instInfo{r.URL, r.Settings.EnableAPI})
+			}
+		}
+		if len(out) > 0 {
+			instCache, instAt = out, time.Now()
+			return out
+		}
+	}
+	return instBuilt
+}
+
 func instStream(w http.ResponseWriter, r *http.Request, p string) {
 	_, inst := mode()
-	cands := []string{inst + "/_/restream" + p}
-	if base, err := url.Parse(inst); err == nil {
-		if b, err := getBody(inst + p); err == nil { // media URLs declared by the track page win
-			var found []string
-			for _, m := range reMedia.FindAllStringSubmatch(string(b), -1) {
-				if u, err := base.Parse(html.UnescapeString(m[1])); err == nil {
-					found = append(found, u.String())
+	cands := []string{inst + "/_/api/progressive" + p, inst + "/_/api/restream" + p, inst + "/_/api/hls" + p, inst + "/_/restream" + p}
+	if ok, _ := apiMode(); !ok {
+		if base, err := url.Parse(inst); err == nil {
+			if b, err := getBody(inst + p); err == nil { // media URLs declared by the track page win
+				var found []string
+				for _, m := range reMedia.FindAllStringSubmatch(string(b), -1) {
+					if u, err := base.Parse(html.UnescapeString(m[1])); err == nil {
+						found = append(found, u.String())
+					}
 				}
+				cands = append(found, cands...)
 			}
-			cands = append(found, cands...)
 		}
 	}
 	for _, c := range cands {
@@ -448,7 +603,7 @@ func stream(w http.ResponseWriter, r *http.Request) {
 		instStream(w, r, p)
 		return
 	}
-	b, err := scGet("/tracks/"+r.URL.Query().Get("id"), nil)
+	b, err := apiGet("/tracks/"+r.URL.Query().Get("id"), nil)
 	if err != nil {
 		http.Error(w, err.Error(), 502)
 		return
@@ -591,9 +746,11 @@ func main() {
 		reply(w, cfg, nil)
 	})
 
+	mux.HandleFunc("/api/instances", func(w http.ResponseWriter, r *http.Request) { reply(w, instances(), nil) })
+
 	mux.HandleFunc("/api/search", func(w http.ResponseWriter, r *http.Request) {
 		t, q := r.URL.Query().Get("type"), r.URL.Query().Get("q")
-		m, inst := mode()
+		m, inst := scrapeMode()
 		var out []Item
 		var err error
 		if m == "instance" {
@@ -602,7 +759,7 @@ func main() {
 		} else {
 			ep := map[string]string{"tracks": "tracks", "users": "users", "playlists": "playlists_without_albums"}[t]
 			var b []byte
-			if b, err = scGet("/search/"+ep, url.Values{"q": {q}, "limit": {"30"}}); err == nil {
+			if b, err = apiGet("/search/"+ep, url.Values{"q": {q}, "limit": {"30"}}); err == nil {
 				out = items(coll(b))
 			}
 		}
@@ -610,7 +767,7 @@ func main() {
 	})
 
 	mux.HandleFunc("/api/trending", func(w http.ResponseWriter, r *http.Request) {
-		m, inst := mode()
+		m, inst := scrapeMode()
 		if m == "instance" { // soundcloak has no charts page; show SoundCloud's official account tracks
 			out, err := scrapeAny(inst, "track", "/soundcloud/tracks", "/search/tracks?q=trending")
 			reply(w, out, err)
@@ -620,41 +777,29 @@ func main() {
 		if g == "" {
 			g = "all-music"
 		}
-		b, err := scGet("/charts", url.Values{"kind": {"trending"}, "genre": {"soundcloud:genres:" + g}, "limit": {"40"}})
-		var c struct {
-			Collection []struct {
-				Track scObj `json:"track"`
-			} `json:"collection"`
-		}
-		var out []scObj
-		if err == nil {
-			json.Unmarshal(b, &c)
-			for _, x := range c.Collection {
-				out = append(out, x.Track)
-			}
-		}
+		out, err := trending(g)
 		reply(w, items(out), err)
 	})
 
 	mux.HandleFunc("/api/user", func(w http.ResponseWriter, r *http.Request) {
 		id := r.URL.Query().Get("id")
-		if m, inst := mode(); m == "instance" {
+		if m, inst := scrapeMode(); m == "instance" {
 			out, err := scrapeAny(inst, "track", id+"/tracks", id)
 			reply(w, out, err)
 			return
 		}
-		b, err := scGet("/users/"+url.PathEscape(id)+"/tracks", url.Values{"limit": {"50"}})
+		b, err := apiGet("/users/"+url.PathEscape(id)+"/tracks", url.Values{"limit": {"50"}})
 		reply(w, items(coll(b)), err)
 	})
 
 	mux.HandleFunc("/api/playlist", func(w http.ResponseWriter, r *http.Request) {
 		id := r.URL.Query().Get("id")
-		if m, inst := mode(); m == "instance" {
+		if m, inst := scrapeMode(); m == "instance" {
 			out, err := scrapeAny(inst, "track", id)
 			reply(w, out, err)
 			return
 		}
-		b, err := scGet("/playlists/"+url.PathEscape(id), nil)
+		b, err := apiGet("/playlists/"+url.PathEscape(id), nil)
 		var p scObj
 		if err == nil {
 			json.Unmarshal(b, &p)
