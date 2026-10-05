@@ -56,7 +56,7 @@ dialog h3{font-weight:600;margin-bottom:14px}.seg{display:flex;padding:3px;borde
 <span class="t" id="cur">0:00</span><input type="range" id="seek" min="0" max="1000" value="0"><span class="t" id="dur">0:00</span><input type="range" id="vol" min="0" max="1" step="0.01" value="0.8"></footer>
 <dialog id="dlg" class="glass"><h3>Settings</h3>
 <div class="seg"><label><input type="radio" name="mode" value="direct">Direct</label><label><input type="radio" name="mode" value="instance">Soundcloak instance</label></div>
-<div class="f" id="ifield">Instance<select id="ipre"><option value="https://ss.2kool4u.net">ss.2kool4u.net</option><option value="https://sc.kuuro.net">sc.kuuro.net</option><option value="">Custom…</option></select><input id="inst" placeholder="https://your-instance.example" style="display:none"></div>
+<div class="f" id="ifield">Instance<select id="ipre"></select><input id="inst" placeholder="https://your-instance.example" style="display:none"></div>
 <div class="acts"><button id="cancel">Cancel</button><button id="save">Save</button></div></dialog>
 <script>
 const $=s=>document.querySelector(s),a=new Audio();let list=[],queue=[],cur=-1,type='tracks',genre='all-music',nowId=null;
@@ -92,9 +92,13 @@ document.querySelector('.logo').onclick=home;
 const mode=()=>document.querySelector('input[name=mode]:checked').value,pre=$('#ipre');
 function sync(){$('#ifield').classList.toggle('off',mode()=='direct');$('#inst').style.display=pre.value?'none':'block'}
 document.querySelectorAll('input[name=mode]').forEach(r=>r.onchange=sync);pre.onchange=sync;
-$('#gear').onclick=async()=>{const c=await(await fetch('/api/settings')).json();
+$('#gear').onclick=async()=>{const c=await(await fetch('/api/settings')).json();let L=[];
+ try{L=await(await fetch('/api/instances')).json()}catch(e){}
+ const o=(u,t)=>`<option value="${esc(u)}">${esc(u.replace('https://',''))} · ${t}</option>`;
+ const extra=['https://ss.2kool4u.net'].filter(u=>!L.some(i=>i.url==u));
+ pre.innerHTML=L.filter(i=>i.api).map(i=>o(i.url,'API')).join('')+L.filter(i=>!i.api).map(i=>o(i.url,'HTML')).join('')+extra.map(u=>o(u,'HTML')).join('')+'<option value="">Custom…</option>';
  document.querySelector(`input[value=${c.mode}]`).checked=true;
- if([...pre.options].some(o=>o.value&&o.value==c.instance))pre.value=c.instance;else{pre.value='';$('#inst').value=c.instance}
+ if([...pre.options].some(x=>x.value&&x.value==c.instance))pre.value=c.instance;else{pre.value='';$('#inst').value=c.instance}
  sync();$('#dlg').showModal()};
 $('#cancel').onclick=()=>$('#dlg').close();
 $('#save').onclick=async()=>{await fetch('/api/settings',{method:'POST',body:JSON.stringify({mode:mode(),instance:pre.value||$('#inst').value.trim()})});$('#dlg').close();$('#q').value.trim()?search():home()};
