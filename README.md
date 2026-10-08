@@ -2,15 +2,15 @@
 Beautiful and modern unofficial SoundCloud client for Linux. Go stdlib only, one binary.
 
 # Change logs
-Improved support. Longterm front-end support. 
+Revamped UI.
 
-added new alternative instance SCScrape so you can load the homepage/music using the new instance instead of loading it locally through the SC website.
+Added download and share links.
 
-UI Improvement, the UI has been revamped.
+Share using either SC own domains or SoundCloak instances.
 
-Old binary and version still works fine. Build still the same. no dependencies.
+Added themes feature.
 
-Fixed instances. It now uses Soundcloak's API.
+Added a **config.go** file where you can add your own theme. Needs to recompile everytime you add/change a theme.
 
 # Instances
 Instance mode: pick ss.2kool4u.net / sc.kuuro.net or a custom Soundcloak-style URL in Settings.
