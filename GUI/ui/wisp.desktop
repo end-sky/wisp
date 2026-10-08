@@ -1,7 +1,0 @@
-[Desktop Entry]
-Type=Application
-Name=Wisp
-Comment=Lightweight unofficial SoundCloud client
-Exec=wisp
-Terminal=false
-Categories=AudioVideo;Audio;Player;
