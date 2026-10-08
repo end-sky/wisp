@@ -9,6 +9,7 @@ import (
 	"html"
 	"io"
 	"io/fs"
+	"mime"
 	"net"
 	"net/http"
 	"net/http/cookiejar"
@@ -34,6 +35,7 @@ type Config struct {
 	Mode     string `json:"mode"` // "direct" or "instance"
 	Instance string `json:"instance"`
 	ClientID string `json:"client_id,omitempty"` // cached (or manually set) SoundCloud client_id
+	Theme    string `json:"theme,omitempty"`
 }
 
 func newClient() *http.Client {
@@ -221,6 +223,7 @@ type Item struct {
 	Art    string `json:"art"`
 	Dur    int    `json:"dur"`
 	Stream string `json:"stream,omitempty"`
+	Path   string `json:"path,omitempty"`
 }
 
 func toItem(o scObj) Item {
@@ -233,6 +236,9 @@ func toItem(o scObj) Item {
 		it.Sub = fmt.Sprintf("%s · %d tracks", o.User.Username, o.TrackCount)
 	default:
 		it.Kind, it.Sub, it.Stream = "track", o.User.Username, "/stream?id="+it.ID
+		if pu, err := url.Parse(o.Permalink); err == nil {
+			it.Path = pu.Path
+		}
 		if ok, _ := apiMode(); ok && o.Permalink != "" { // soundcloak /_/api streams are addressed by permalink
 			if pu, err := url.Parse(o.Permalink); err == nil {
 				it.Stream = "/stream?p=" + url.QueryEscape(pu.Path)
@@ -362,7 +368,7 @@ func scrape(inst, path, kind string) ([]Item, error) {
 		}
 		i, seen := idx[p]
 		if !seen {
-			it := Item{Kind: kind, ID: p, Sub: segs[0]}
+			it := Item{Kind: kind, ID: p, Sub: segs[0], Path: p}
 			if kind == "track" {
 				it.Stream = "/stream?p=" + url.QueryEscape(p)
 			}
@@ -632,7 +638,7 @@ func stream(w http.ResponseWriter, r *http.Request) {
 func pipeAudio(w http.ResponseWriter, r *http.Request, u, mime string) bool {
 	hls := strings.Contains(strings.Split(u, "?")[0], ".m3u8")
 	hdr := map[string]string{}
-	if rg := r.Header.Get("Range"); rg != "" && !hls {
+	if rg := r.Header.Get("Range"); rg != "" && !hls && r.URL.Query().Get("dl") == "" {
 		hdr["Range"] = rg
 	}
 	resp, err := get(r, u, hdr)
@@ -649,6 +655,7 @@ func pipeAudio(w http.ResponseWriter, r *http.Request, u, mime string) bool {
 		hlsStitch(w, r, u, string(pl), mime)
 		return true
 	}
+	setDL(w, r, ct)
 	for _, h := range []string{"Content-Type", "Content-Length", "Content-Range", "Accept-Ranges"} {
 		if v := resp.Header.Get(h); v != "" {
 			w.Header().Set(h, v)
@@ -665,6 +672,7 @@ func hlsStitch(w http.ResponseWriter, r *http.Request, base, pl, mime string) {
 		mime = "audio/mpeg"
 	}
 	w.Header().Set("Content-Type", strings.Split(mime, ";")[0])
+	setDL(w, r, mime)
 	fl, _ := w.(http.Flusher)
 	send := func(ref string) bool {
 		u, err := bu.Parse(ref)
@@ -744,6 +752,10 @@ func main() {
 			}
 		}
 		reply(w, cfg, nil)
+	})
+
+	mux.HandleFunc("/api/ui", func(w http.ResponseWriter, r *http.Request) {
+		reply(w, map[string]any{"ui": UI, "themes": Themes}, nil)
 	})
 
 	mux.HandleFunc("/api/instances", func(w http.ResponseWriter, r *http.Request) { reply(w, instances(), nil) })
@@ -827,4 +839,28 @@ func openUI(u string) {
 		}
 	}
 	exec.Command("xdg-open", u).Start()
+}
+
+// setDL turns a /stream response into a file download when ?dl=<name> is present.
+func setDL(w http.ResponseWriter, r *http.Request, mt string) {
+	n := r.URL.Query().Get("dl")
+	if n == "" {
+		return
+	}
+	ext := ".mp3"
+	switch {
+	case strings.Contains(mt, "ogg"), strings.Contains(mt, "opus"):
+		ext = ".opus"
+	case strings.Contains(mt, "mp4"), strings.Contains(mt, "aac"):
+		ext = ".m4a"
+	}
+	n = strings.Map(func(c rune) rune {
+		if c < 32 || strings.ContainsRune(`/\:*?"<>|`, c) {
+			return '_'
+		}
+		return c
+	}, n)
+	if v := mime.FormatMediaType("attachment", map[string]string{"filename": n + ext}); v != "" {
+		w.Header().Set("Content-Disposition", v)
+	}
 }
