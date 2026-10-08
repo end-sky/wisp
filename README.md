@@ -10,7 +10,7 @@ Share using either SC own domains or SoundCloak instances.
 
 Added themes feature.
 
-Added a **config.go** file where you can add your own theme. Needs to recompile everytime you add/change a theme.
+Added a **config.c** file where you can add your own theme. Needs to recompile everytime you add/change a theme.
 
 Made a GUI version.
 
