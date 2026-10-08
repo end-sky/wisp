@@ -24,33 +24,22 @@ If SoundCloud rotates its client_id and auto-detection ever fails, set "client_i
 Soundcloak instances with EnableAPI (see maid.zone/soundcloak/instances.json) are auto-detected via /_/info and used
 through their /_/api/v2 proxy + /_/api/{progressive,restream,hls} streams; others fall back to HTML scraping.
 
-# Build:  
-```bash
-go build -ldflags="-s -w" -o wisp .
-```
+## Build (Nix)
+    nix build            # builds both; result/bin/wisp finds wisp-core itself
+    nix run
+    nix develop          # dev shell with go, gcc, gtk4, gstreamer…
 
-(needs Go 1.21+)
+## Build (manual)
+    cd core && go build -ldflags="-s -w" -o ../ui/wisp-core .
+    cd ../ui && make && ./wisp          # needs gtk4, libsoup3, json-glib, gstreamer (+ good/ugly/libav plugins)
+
+Keys: j/k move · Enter open · h back · g home · / search · Space pause · n/p next/prev · [ ] seek · + - volume ·
+c copy link · d download · t theme · s settings · ? help   (all rebindable in ui/config.c)
+
+Settings live in ~/.config/wisp/config.json (mode, instance, theme, cached client_id).
+Downloads go to your XDG Downloads folder (or `download_dir` in config.c).
 
 # Run:
 ```bash
-./wisp
+./result/bin/wisp
 ```
-
-(opens in Chromium/Chrome/Brave app mode, else your default browser)
-
-# Flags:  
-```txt
--port 47653
--no-window
-```
-
-# Config: 
-
-```txt
-~/.config/wisp/config.json
-```
-
-(also editable via the ⚙ settings dialog)
-
-# Note:
-You may also need gcc to build this application.
