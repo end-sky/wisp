@@ -12,6 +12,8 @@ Added themes feature.
 
 Added a **config.go** file where you can add your own theme. Needs to recompile everytime you add/change a theme.
 
+Made a GUI version.
+
 ## Screenshots
 
 ![wisp main page](https://raw.githubusercontent.com/end-sky/wisp/refs/heads/main/imgs/wisp.png)
