@@ -12,6 +12,10 @@ Added themes feature.
 
 Added a **config.go** file where you can add your own theme. Needs to recompile everytime you add/change a theme.
 
+## Screenshots
+
+![alt text]([https://github.com/[username]/[reponame]/blob/[branch]/image.jpg?raw=true](https://raw.githubusercontent.com/end-sky/wisp/refs/heads/main/imgs/wisp.png))
+
 # Instances
 Instance mode: pick ss.2kool4u.net / sc.kuuro.net or a custom Soundcloak-style URL in Settings.
 If SoundCloud rotates its client_id and auto-detection ever fails, set "client_id" in config.json.
