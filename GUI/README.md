@@ -1,4 +1,4 @@
-# Wisp v1.0.0
+# Wisp v2.0.0
 
 Lightweight, unofficial SoundCloud client for Linux.
 
